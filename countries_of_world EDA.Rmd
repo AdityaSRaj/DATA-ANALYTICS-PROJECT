@@ -1,0 +1,101 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+```{r}
+library(readr)
+library(tidyverse)
+library(scales)
+library(RColorBrewer)
+library(ggthemes)
+library(lubridate)
+library(ggrepel)
+library(reshape)
+library(gridExtra)
+library(maps)
+library(stringr)
+library(ggcorrplot)
+library(viridis)
+df <- read_csv("countries of the world.csv")
+View(df)
+
+```
+```{r}
+dim(df)
+summary(df)
+```
+This dataset contains 227 rows and 20 cloumns.
+110
+
+```{r}
+sum(is.na(df))
+```
+There are 110 null values present in the data set.
+```{r}
+sapply(df, function(x) sum(is.na(x)))
+```
+
+```{r}
+colnames(df)
+df <- df[,c("Country","Population","Area","PopDensity","GDP","Literacy","Phones","Birthrate","Deathrate","Agriculture","Industry","Service")]
+names(df) <- c("Region","Population","Area","PopDensity","GDP","Phones","Literacy","Birthrate","Deathrate","Agriculture","Industry","Service")
+```
+
+
+```{r}
+df$Region <- gsub(" ", "", df$Region)
+df$PopDensity <- as.numeric(gsub(",", ".", df$PopDensity))
+df$Phones <- as.numeric(gsub(",", ".", df$Phones))
+df$Literacy <- as.numeric(gsub(",", ".", df$Literacy))
+df$Birthrate	<- as.numeric(gsub(",", ".", df$Birthrate))
+df$Deathrate	<- as.numeric(gsub(",", ".", df$Deathrate))
+df$Agriculture <- as.numeric(gsub(",", ".", df$Agriculture))
+df$Industry <- as.numeric(gsub(",", ".", df$Industry))
+df$Service <- as.numeric(gsub(",", ".", df$Service))
+```
+
+
+```{r}
+library(dplyr)
+plot(df$GDP)
+plot(df$Literacy)
+plot(df$Phones)
+plot(df$Birthrate)
+plot(df$Deathrate)
+plot(df$Agriculture)
+plot(df$Service)
+plot(df$Industry)
+```
+Replacing the null/missing values with their respective mean.
+```{r}
+df$GDP[is.na(df$GDP)] <- mean(df$GDP, na.rm = TRUE)
+df$Literacy[is.na(df$Literacy)] <- mean(df$Literacy, na.rm = TRUE)
+df$Phones[is.na(df$Phones)] <- mean(df$Phones, na.rm = TRUE)
+df$Birthrate[is.na(df$Birthrate)] <- mean(df$Birthrate, na.rm = TRUE)
+df$Deathrate[is.na(df$Deathrate)] <- mean(df$Deathrate, na.rm = TRUE)
+df$Agriculture[is.na(df$Agriculture)] <- mean(df$Agriculture, na.rm = TRUE)
+df$Service[is.na(df$Service)] <- mean(df$Service, na.rm = TRUE)
+df$Industry[is.na(df$Industry)] <- mean(df$Industry, na.rm = TRUE)
+sum(is.na(df))
+view(df)
+```
+Successfully replaced all NA's and missing values present in the dataset with their respective mean.
+
+```{r}
+options(warn = -1)
+options(scipen = 10000)
+options(repr.plot.width = 13.8, repr.plot.height = 9.2)
+library(ggcorrplot)
+annotate <- ggplot2::annotate
+core <- cor(df[,c(2:ncol(df))], method = "spearman", use = "complete.obs")
+options(repr.plot.width = 13, repr.plot.height = 11.18)
+ggcorrplot(core, outline.col = "gray30", type = "upper",
+           legend.title = "Strength of \ncorrelation", colors = c("#6D9EC1", "white", "#E46726"))+
+  labs(y = "", x = "", title = "Spearman's correlation matrix for continuous variables")
+```
+
+Positive correlations are displayed in  orange and negative correlations in blue color.
+Color intensity and the size of the circle are proportional to the correlation coefficients.
+(Area,Population),(Literacy,GDP),(Service,Literacy) are strongly correlated.
+(Birthrate,Phones),(Birthrate,GDP),(Agriculture,GDP),(Agriculture,Phones) are negatively correlated.
