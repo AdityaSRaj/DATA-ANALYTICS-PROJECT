@@ -1,0 +1,335 @@
+---
+title: "REPORT-THE AGGREGATORS"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+
+```{r}
+library(readr)
+data <- read_csv("country_vaccinations.csv")
+country_vaccinations_by_manufacturer <- read_csv("country_vaccinations_by_manufacturer.csv")
+other <- read_csv("countries of the world.csv")
+```
+
+```{r}
+options(warn = -1)
+options(scipen = 10000)
+options(repr.plot.width = 13.8, repr.plot.height = 9.2)
+
+library(tidyverse)
+library(scales)
+library(RColorBrewer)
+library(ggthemes)
+library(lubridate)
+library(ggrepel)
+library(reshape)
+library(gridExtra)
+library(maps)
+library(stringr)
+library(ggcorrplot)
+library(viridis)
+
+annotate <- ggplot2::annotate
+
+theme_michau <- theme(legend.position = "bottom", legend.direction = "horizontal", axis.text = element_text(size = 15.4), 
+plot.caption = element_text(color = "gray65", face = "bold", size = 10), legend.text = element_text(size = 15.4), 
+axis.title = element_text(size = 15.9, face = "bold", color = "gray25"), legend.title = element_text(size = 15.4), 
+axis.line = element_line(size = 0.4), plot.title = element_text(size = 19.5), plot.subtitle = element_text(size = 15.9), 
+strip.text = element_text(size = 14.4, face = "bold"))
+```
+
+```{r}
+data <- data[,c("country", "total_vaccinations", "date", "people_vaccinated", "daily_vaccinations_raw",
+                "people_vaccinated_per_hundred", "daily_vaccinations_per_million", "vaccines")]
+
+data$date <- as.Date(data$date)
+
+data$total_vaccinations[is.na(data$total_vaccinations)==T] <- 0 
+data$people_vaccinated[is.na(data$people_vaccinated)==T] <- 0 
+data$daily_vaccinations_raw[is.na(data$daily_vaccinations_raw)==T] <- 0 
+data$people_vaccinated_per_hundred[is.na(data$people_vaccinated_per_hundred)==T] <- 0 
+data$daily_vaccinations_per_million[is.na(data$daily_vaccinations_per_million)==T] <- 0 
+
+head <- data[sample(1:nrow(data),5), ]
+head[order(head$date),]
+
+data$month <- month(data$date)
+data$weekday <- weekdays(data$date)
+data$percent_people <- data$people_vaccinated_per_hundred/100
+```
+```{r}
+full1 <- data %>%
+  group_by(date, country) %>%
+  filter(as.Date(date) > "2021-05-15")
+
+ind1 <- data %>%
+  group_by(date, country) %>%
+  filter(country == "India") %>%
+  filter(as.Date(date) > "2021-05-15")
+
+full1$daily_vaccinations_raw <- full1$daily_vaccinations_raw/1000000
+ind1$daily_vaccinations_raw <- ind1$daily_vaccinations_raw/1000000
+
+ggplot()+
+  geom_line(data = full1, aes(date, daily_vaccinations_raw, group = country), size = 0.8, colour = "gray80")+
+  geom_line(data = ind1, aes(date, daily_vaccinations_raw), size = 0.9, colour = "red2")+
+  geom_text(data = ind1, aes(x = max(ind1$date), y = ind1$daily_vaccinations_raw[ind1$date==max(ind1$date)], 
+                              label = country), hjust = 0.8, vjust = -0.9, size = 5.9, color = "red2")+
+  scale_x_date(date_labels = "%d %b %y", date_breaks = "50 days")+
+  labs(x = "Date", y = "Vaccinations (in milions)", title = "Daily vaccinations", subtitle = "per country, since 2021-05-15")+
+  theme_fivethirtyeight()
+```
+```{r}
+full2 <- data %>%
+  group_by(date, country) %>%
+  filter(people_vaccinated>0) %>%
+  filter(as.Date(date) > "2021-05-15")
+
+ind2 <- data %>%
+  group_by(date, country) %>%
+  filter(country == "India") %>%
+  filter(people_vaccinated>0) %>%
+  filter(as.Date(date) > "2021-05-15")
+
+full2$people_vaccinated <- full2$people_vaccinated/1000000
+ind2$people_vaccinated <- ind2$people_vaccinated/1000000
+
+ggplot()+
+  geom_line(data = full2, aes(date, people_vaccinated, group = country), size = 0.8, colour = "gray80")+
+  geom_line(data = ind2, aes(date, people_vaccinated), size = 0.9, colour = "red2")+
+  geom_text(data = ind2, aes(x = max(ind2$date), y = ind2$people_vaccinated[ind2$date==max(ind2$date)], 
+                              label = country), hjust = 0.9, vjust = -0.7, size = 5.9, color = "red2")+
+  scale_x_date(date_labels = "%d %b %y", date_breaks = "50 days")+
+  labs(x = "Date", y = "Vaccinations (cumulated, in milions)", title = "Number of people vaccinated at least once", 
+       subtitle = "per country, since 2021-05-15")+
+  theme_fivethirtyeight()
+```
+```{r}
+ggplot()+
+  geom_line(data = full2, aes(date, percent_people, group = country), size = 0.8, colour = "gray80")+
+  geom_line(data = ind2, aes(date, percent_people), size = 0.9, colour = "red2")+
+  geom_text(data = ind2, aes(x = max(ind2$date), y = ind2$percent_people[ind2$date==max(ind2$date)], 
+                              label = country), hjust = 0.9, vjust = -0.7, size = 5.9, color = "red2")+
+  scale_x_date(date_labels = "%d %b %y", date_breaks = "50 days")+
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1))+
+  labs(x = "Date", y = "Vaccinations (%)", 
+       title = "Number of vaccinations in proportion to citizens", 
+       subtitle = "per country, since 2021-05-15")+
+  theme_fivethirtyeight()
+```
+```{r}
+world_map <- map_data("world") %>%
+  filter(between(lat, 0,60)) %>%
+  filter(between(long, 50, 110))
+
+country <- data %>%
+  filter(date == "2022-01-15")%>%
+  group_by(country) %>%
+  select(country, people_vaccinated_per_hundred)
+
+names(country)[1] <- "region"
+
+world_map <- world_map %>%
+  left_join(country, by = "region")
+
+world_map2 <- world_map %>%
+  select(long, lat, region, people_vaccinated_per_hundred) %>%
+  group_by(region) %>%
+  summarise(long = mean(long), lat = mean(lat), people_vaccinated_per_hundred = mean(people_vaccinated_per_hundred), 
+            .groups = 'drop')
+
+world_map2$india <- ifelse(world_map2$region=="India","red2","gray80")
+
+ggplot()+
+  geom_polygon(data = world_map, aes(x = long, y = lat, group = group), fill = "white", colour = "gray70")+
+  geom_point(data = world_map2, aes(x = long, y = lat, size = people_vaccinated_per_hundred),
+             shape = 21, fill = world_map2$india)+
+  scale_size(range = c(0, 6))+
+  scale_fill_manual(values = c("red2", "gray80"))+
+  labs(x = "Latitude", y = "Longitude", 
+       title = "Share of vaccinated inhabitants among countries near India",
+       size = "Share of vaccinated (in %)", subtitle = "per country as of 2022-01-15")
+  theme_fivethirtyeight()+
+  theme(legend.position = "right", legend.direction = "vertical")
+```
+```{r}
+full3 <- data %>%
+  filter(as.Date(date) > "2021-05-18") %>%
+  select(weekday, country, daily_vaccinations_per_million) %>%
+  group_by(weekday, country) %>%
+  summarise(nd = mean(daily_vaccinations_per_million), .groups = 'drop')
+
+full3$india <- ifelse(full3$country=="India","India", "Rest of World")
+
+full3ind <- full3 %>%
+  filter(india=="India")
+
+full3row <- full3 %>%
+  filter(india=="Rest of World")
+
+full3row <- full3row %>%
+  group_by(weekday) %>%
+  summarise(nd = mean(nd), .groups = 'drop')
+
+full3row$country <- "Rest of World"
+full3ind <- full3ind[,1:3]
+full3row <- full3row[,c(1,3,2)]
+
+full3ind <- as.data.frame(full3ind)
+full3ind$nd <- full3ind$nd/sum(full3ind$nd)
+
+full3row <- as.data.frame(full3row)
+full3row$nd <- full3row$nd/sum(full3row$nd)
+
+full3 <- rbind(full3ind, full3row)
+
+ggplot(full3, aes(weekday, nd, fill = country))+
+  geom_bar(stat = "identity",  width = 0.75, position=position_dodge(), col = "gray30")+
+  scale_x_discrete(limit = c("Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"))+
+  scale_fill_manual(values = c("red2","gray80"))+
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1))+
+  labs(x = "Weekday", y = "Average share of a day in weekly vaccinations (in%)", 
+       title = "Daily vaccinations per million inhabitants by weekday",
+       fill = "Country", subtitle = "per country, since 2021-05-18")+
+  theme_fivethirtyeight()+
+  theme(legend.position = "right", legend.direction = "vertical", axis.title.y = element_text(size = 15))
+```
+```{r}
+data$number_of_vac <- str_count(data$vaccines, ",")+1
+
+vacx <- data %>%
+  filter(as.Date(date) > "2021-05-18") %>%
+  group_by(country, number_of_vac) %>%
+  summarise(avg = mean(number_of_vac), .groups = 'drop') %>%
+  filter(avg>0)
+
+vacx$india <- ifelse(vacx$country=="India", "India", "Rest of World")
+
+ggplot(vacx, aes(reorder(country, +avg), avg, fill = india, colour = india))+
+  geom_bar(stat = "identity",  width = 0.9)+
+  scale_fill_manual(values = c("red2", "gray80"))+
+  scale_colour_manual(values = c("red2", "gray80"), guide = "none")+
+  coord_flip()+
+  labs(y = "Number of suppliers", x = "Country", title = "Number of vaccine suppliers", fill = "Country", 
+       subtitle = "per country, since 2021-05-18")+
+  theme_fivethirtyeight()+
+  theme(legend.position = "right", legend.direction = "vertical", axis.text.y = element_text(size = 0),
+        panel.grid.major.y = element_blank())
+```
+```{r}
+other <- other[,c("Country", "Population", "Area", "PopDensity", "GDP", 
+                  "Phones", "Literacy", "Birthrate", "Deathrate", "Agriculture", "Industry", "Service")]
+
+names(other) <- c("region", "Population", "Area", "PopDensity", "GDP", "Phones", "Literacy", "Birthrate", 
+                  "Deathrate", "Agriculture", "Industry", "Service")
+
+other$region <- gsub(" ", "", other$region)
+other$PopDensity <- as.numeric(gsub(",", ".", other$PopDensity))
+other$Phones <- as.numeric(gsub(",", ".", other$Phones))
+other$Literacy <- as.numeric(gsub(",", ".", other$Literacy))
+other$Birthrate	<- as.numeric(gsub(",", ".", other$Birthrate))
+other$Deathrate	<- as.numeric(gsub(",", ".", other$Deathrate))
+other$Agriculture <- as.numeric(gsub(",", ".", other$Agriculture))
+other$Industry <- as.numeric(gsub(",", ".", other$Industry))
+other$Service <- as.numeric(gsub(",", ".", other$Service))
+
+
+country <- as.data.frame(country)
+country$region <- as.character(country$region)
+
+other <- merge(other, country, by = "region", all.x = T, )
+names(other)[13] <- "Vaccinate_Percentage"
+
+head2 <- other[sample(1:nrow(other),5), ]
+head2
+```
+```{r}
+core <- cor(other[,c(2:ncol(other))], method = "spearman", use = "complete.obs")
+
+options(repr.plot.width = 20, repr.plot.height = 20)
+
+ggcorrplot(core)
+```
+
+```{r}
+other$india <- ifelse(other$region=="India","India", "Rest of World")
+
+options(repr.plot.width = 13.8, repr.plot.height = 9.2)
+
+ggplot(other, aes(Area, Population/1000000, fill = india, size = PopDensity))+
+  geom_point(shape = 21)+
+  scale_fill_manual(values = c("red2", "gray80"), guide = "none")+
+  scale_size(range = c(0.2, 14))+
+  scale_y_log10()+
+  scale_x_log10()+
+  labs(y = "Population (in milions, logarithmic scale)", x = "Area (in km2, logarithmic scale)", title = "Population, area and density of population", fill = "Country",
+       subtitle = "by countries", size = "Population Density\n(per square mile)")+
+  theme_fivethirtyeight()+
+  theme(legend.position = "right", legend.direction = "vertical")
+```
+```{r}
+ggplot(other, aes(Birthrate, Deathrate, fill = india))+
+  geom_point(shape = 21, size = 3.5, alpha = 0.85)+
+  scale_fill_manual(values = c("red2", "gray80"), guide = "none")+
+  labs(y = "Deathrate", x = "Birthrate", title = "Birthrate and deathrate", fill = "Country",
+       subtitle = "by countries")+
+  theme_fivethirtyeight()+
+  theme(legend.position = "right", legend.direction = "vertical")
+
+```
+```{r}
+ggplot(other, aes(Phones, Literacy/100, fill = india))+
+  geom_point(shape = 21, size = 3.5, alpha = 0.85)+
+  scale_fill_manual(values = c("red2", "gray80"), guide = "none")+
+  scale_x_log10()+
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1))+
+  #annotate(geom = "curve", xend = 500, y = 0.82, x = 800, yend = 0.95, curvature = 0.25, arrow = arrow(length = unit(3.5, "mm")))+
+  #annotate("text", x = 800, y = 0.8, label = "India", size = 5.5, colour = "red2", fontface = 2)+
+  labs(y = "Literacy (in %)", x = "Phones (per 1000 inhabitants, logarithmic scale)", title = "Literacy and number of phones",
+       fill = "Country", subtitle = "by countries")+
+  theme_fivethirtyeight()+
+  theme(legend.position = "right", legend.direction = "vertical")
+```
+```{r}
+ggplot(other, aes(reorder(region, + GDP), GDP, fill = india, size = india))+
+  geom_bar(stat = "identity", width = 0.9)+
+  scale_fill_manual(values = c("red2", "gray80"))+
+  scale_colour_manual(values = c("red2", "gray80"))+
+  scale_size_manual(values = c(7,2), guide = "none")+
+  coord_flip()+
+  labs(y = "GDP per capita (in $)", x = "Country", title = "GDP per capita", fill = "Country",
+       subtitle = "by countries")+
+  theme_fivethirtyeight()+
+  theme(legend.position = "right", legend.direction = "vertical", axis.text.y = element_text(size = 0),
+        panel.grid.major.y = element_blank())
+```
+```{r}
+gosp <- other %>%
+  select(region, Agriculture, Industry, Service) %>%
+  filter(is.na(Agriculture)==F) %>%
+  filter(is.na(Industry)==F) %>%
+  filter(is.na(Service)==F) %>%
+  melt(., id.vars = "region") 
+
+gosp <- gosp[gosp$region %in% c("India", "Sweden", "Italy", "Singapore", "Taiwan", "UnitedArabEmirates", 
+"Spain", "NewZealand", "Qatar","Greece", "Cyprus", "Kuwait", "Slovenia", "Portugal", "Korea,South", 
+"Malta", "Bahrain", "Finland", "CzechRepublic", "Hungary", "UnitedKingdom"),]
+
+gosp$india <- ifelse(gosp$region=="India","India", "Rest of World")
+a <- ifelse(gosp$region=="India","red2", "gray25")
+
+ggplot(gosp, aes(region, weight = value))+
+  geom_bar(aes(fill = variable), width = 0.75)+
+  scale_fill_brewer(palette = "Spectral", direction = -1)+
+  scale_colour_manual(values = c("red2", "gray45"), guide = "none")+
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1))+
+  coord_flip()+
+  labs(x = "Country", y = "Share of the sector in the employment structure", title = "Agriculture, industry and service",
+       colour = "Country", fill = "Employment\nstructure", subtitle = "by countries")+
+  theme_fivethirtyeight()+
+  theme_michau+
+  theme(legend.position = "right", legend.direction = "vertical", axis.text.y = element_text(colour = a))
+```
+
